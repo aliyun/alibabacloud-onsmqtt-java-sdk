@@ -10,7 +10,7 @@
 
   <groupId>com.alibaba.mqtt</groupId>  
     <artifactId>server-sdk</artifactId>
-  <version>1.0.7-SNAPSHOT</version>
+  <version>1.0.7.Final</version>
   <properties>
     <!-- Compiler settings properties -->
     <maven.compiler.source>1.8</maven.compiler.source>
