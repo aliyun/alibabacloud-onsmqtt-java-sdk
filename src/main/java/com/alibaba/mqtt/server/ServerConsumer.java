@@ -24,6 +24,7 @@ import com.alibaba.mqtt.server.config.ConsumerConfig;
 import com.alibaba.mqtt.server.model.MessageProperties;
 import com.alibaba.mqtt.server.model.StatusNotice;
 import com.alibaba.mqtt.server.network.AbstractChannel;
+import com.alibaba.mqtt.server.util.ThreadFactoryImpl;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
@@ -33,8 +34,10 @@ import com.rabbitmq.client.Envelope;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -46,6 +49,10 @@ public class ServerConsumer extends AbstractChannel {
     private ConsumerConfig consumerConfig;
     private ExecutorService msgExecutor;
     private ExecutorService statusExecutor;
+    private static ScheduledThreadPoolExecutor scheduler =
+            new ScheduledThreadPoolExecutor(1, new ThreadFactoryImpl("scan_server_consumer_callback_"));
+    private Map<String, StatusListener> subscribeStatusMap = new ConcurrentHashMap<>();
+    private Map<String, MessageListener> subscribeTopicMap = new ConcurrentHashMap<>();
 
     public ServerConsumer(ChannelConfig channelConfig, ConsumerConfig consumerConfig) {
         super(channelConfig);
@@ -72,6 +79,37 @@ public class ServerConsumer extends AbstractChannel {
                 consumerConfig.getMaxConsumeThreadNum(),
                 1, TimeUnit.MINUTES,
                 new LinkedBlockingQueue<>(30000));
+
+        scheduler.scheduleAtFixedRate(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    for (int i = 0; i < CONNECTION_NUM; i++) {
+                        Channel channel = channels[i];
+                        if (!channel.isOpen()) {
+                            channels[i] = connections[i].createChannel();
+                            Channel finalChannel = channels[i];
+                            subscribeTopicMap.forEach((topic, messageListener) -> {
+                                try {
+                                    _subscribeTopic(finalChannel, topic, messageListener);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            });
+                            subscribeStatusMap.forEach((mqttGroupId, statusListener) -> {
+                                try {
+                                    _subscribeStatus(finalChannel, mqttGroupId, statusListener);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            });
+                        }
+                    }
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
+            }
+        }, 5, 5, TimeUnit.SECONDS);
     }
 
     public void stop() throws IOException {
@@ -81,58 +119,74 @@ public class ServerConsumer extends AbstractChannel {
     }
 
     public void subscribeTopic(String firstTopic, MessageListener messageListener) throws IOException {
+        if (firstTopic == null || messageListener == null) {
+            return;
+        }
+        subscribeTopicMap.put(firstTopic, messageListener);
         for (int i = 0; i < CONNECTION_NUM; i++) {
             Channel channel = channels[i];
-            channel.basicConsume(firstTopic, false, new DefaultConsumer(channel) {
-                @Override
-                public void handleDelivery(String consumerTag, Envelope envelope,
-                                           AMQP.BasicProperties properties, byte[] body) {
-                    msgExecutor.submit(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                messageListener.process(properties.getMessageId(), new MessageProperties(properties), body);
-                                channel.basicAck(envelope.getDeliveryTag(), false);
-                            } catch (Throwable t) {
-                                try {
-                                    channel.basicNack(envelope.getDeliveryTag(), false, false);
-                                } catch (IOException e) {
-                                }
-                            }
-                        }
-                    });
-                }
-            });
+            _subscribeTopic(channel, firstTopic, messageListener);
         }
     }
 
-    public void subscribeStatus(String mqttGroupId, StatusListener statusListener) throws IOException {
-        Map<String, Object> arguments = new HashMap<>(4);
-        arguments.put("GROUP_ID", mqttGroupId);
-        for (int i = 0; i < CONNECTION_NUM; i++) {
-            Channel channel = channels[i];
-            channel.basicConsume("STATUS", false, arguments, new DefaultConsumer(channel) {
-                @Override
-                public void handleDelivery(String consumerTag, Envelope envelope,
-                                           AMQP.BasicProperties properties, byte[] body)
-                        throws IOException {
-                    statusExecutor.submit(new Runnable() {
-                        @Override
-                        public void run() {
+    public void _subscribeTopic(Channel channel, String firstTopic, MessageListener messageListener) throws IOException {
+        channel.basicConsume(firstTopic, false, new DefaultConsumer(channel) {
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope,
+                                       AMQP.BasicProperties properties, byte[] body) {
+                msgExecutor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            messageListener.process(properties.getMessageId(), new MessageProperties(properties), body);
+                            channel.basicAck(envelope.getDeliveryTag(), false);
+                        } catch (Throwable t) {
                             try {
-                                statusListener.process(new StatusNotice(body));
-                                channel.basicAck(envelope.getDeliveryTag(), false);
-                            } catch (Throwable t) {
-                                try {
-                                    channel.basicNack(envelope.getDeliveryTag(), false, false);
-                                } catch (IOException e) {
-                                }
+                                channel.basicNack(envelope.getDeliveryTag(), false, false);
+                            } catch (IOException e) {
                             }
                         }
-                    });
-                }
-            });
+                    }
+                });
+            }
+        });
+    }
+
+    public void subscribeStatus(String mqttGroupId, StatusListener statusListener) throws IOException {
+        if (mqttGroupId == null || statusListener == null) {
+            return;
         }
+        subscribeStatusMap.put(mqttGroupId, statusListener);
+        for (int i = 0; i < CONNECTION_NUM; i++) {
+            Channel channel = channels[i];
+            _subscribeStatus(channel, mqttGroupId, statusListener);
+        }
+    }
+
+    public void _subscribeStatus(Channel channel, String mqttGroupId, StatusListener statusListener) throws IOException {
+        Map<String, Object> arguments = new HashMap<>(4);
+        arguments.put("GROUP_ID", mqttGroupId);
+        channel.basicConsume("STATUS", false, arguments, new DefaultConsumer(channel) {
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope,
+                                       AMQP.BasicProperties properties, byte[] body)
+                    throws IOException {
+                statusExecutor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            statusListener.process(new StatusNotice(body));
+                            channel.basicAck(envelope.getDeliveryTag(), false);
+                        } catch (Throwable t) {
+                            try {
+                                channel.basicNack(envelope.getDeliveryTag(), false, false);
+                            } catch (IOException e) {
+                            }
+                        }
+                    }
+                });
+            }
+        });
     }
 
 }

@@ -43,7 +43,7 @@ public class ServerProducer extends AbstractChannel {
     private ProducerConfig producerConfig;
     private Connection connection;
     private Channel channel;
-    private ScheduledThreadPoolExecutor scheduler =
+    private static ScheduledThreadPoolExecutor scheduler =
             new ScheduledThreadPoolExecutor(1, new ThreadFactoryImpl("scan_server_producer_callback_"));
 
 
