@@ -30,6 +30,7 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -165,6 +166,9 @@ public class ServerConsumer extends AbstractChannel {
 
     public void _subscribeStatus(Channel channel, String mqttGroupId, StatusListener statusListener) throws IOException {
         Map<String, Object> arguments = new HashMap<>(4);
+        if (getChannelConfig().isCustomAuth() && mqttGroupId == null) {
+            mqttGroupId = StringUtils.EMPTY;
+        }
         arguments.put("GROUP_ID", mqttGroupId);
         channel.basicConsume("STATUS", false, arguments, new DefaultConsumer(channel) {
             @Override

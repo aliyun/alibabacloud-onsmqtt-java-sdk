@@ -26,10 +26,12 @@ public class MessageProperties {
     private static final String PROPERTY_MQTT_SECOND_TOPIC = "mqttSecondTopic";
     private static final String PROPERTY_MQTT_PARENT_TOPIC = "mqttParentTopic";
     private static final String PROPERTY_MQTT_CLIENT = "clientId";
+    private static final String PROPERTY_MQTT_BORN_TIME = "bornTime";
 
     private String firstTopic;
     private String secondTopic;
     private String clientId;
+    private Long bornTime;
 
     public MessageProperties(AMQP.BasicProperties properties) {
         Map<String, Object> headers = properties.getHeaders();
@@ -47,6 +49,8 @@ public class MessageProperties {
                 secondTopic = value.toString();
             } else if (PROPERTY_MQTT_CLIENT.equals(entry.getKey())) {
                 clientId = value.toString();
+            } else if (PROPERTY_MQTT_BORN_TIME.equals(entry.getKey())) {
+                bornTime = Long.parseLong(value.toString());
             }
         }
     }
@@ -61,5 +65,9 @@ public class MessageProperties {
 
     public String getClientId() {
         return clientId;
+    }
+
+    public Long getBornTime() {
+        return bornTime;
     }
 }

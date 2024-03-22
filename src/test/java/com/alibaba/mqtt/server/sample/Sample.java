@@ -17,6 +17,7 @@
 
 package com.alibaba.mqtt.server.sample;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.mqtt.server.ServerConsumer;
 import com.alibaba.mqtt.server.ServerProducer;
 import com.alibaba.mqtt.server.callback.MessageListener;
@@ -53,13 +54,12 @@ public class Sample {
         channelConfig.setInstanceId(instanceId);
         channelConfig.setAccessKey(accessKey);
         channelConfig.setSecretKey(secretKey);
-
         ServerConsumer serverConsumer = new ServerConsumer(channelConfig, new ConsumerConfig());
         serverConsumer.start();
         serverConsumer.subscribeTopic(firstTopic, new MessageListener() {
             @Override
             public void process(String msgId, MessageProperties messageProperties, byte[] payload) {
-                System.out.println("Receive:" + msgId + "," + new String(payload));
+                System.out.println("Receive:" + msgId + "," + new String(payload) + ","+ JSON.toJSONString(messageProperties));
             }
         });
 
@@ -73,7 +73,7 @@ public class Sample {
         ServerProducer serverProducer = new ServerProducer(channelConfig, new ProducerConfig());
         serverProducer.start();
         for (int i = 0; i < 10000; i++) {
-            Thread.sleep(1000);
+            Thread.sleep(3000);
             String mqttTopic = firstTopic + "/" + secondTopic;
             serverProducer.sendMessage(mqttTopic, ("hello " + i).getBytes(StandardCharsets.UTF_8), new SendCallback() {
                 @Override
@@ -87,5 +87,7 @@ public class Sample {
                 }
             });
         }
+
+        Thread.sleep(10000000);
     }
 }

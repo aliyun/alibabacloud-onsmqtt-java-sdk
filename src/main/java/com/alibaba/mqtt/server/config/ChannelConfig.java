@@ -26,6 +26,7 @@ public class ChannelConfig extends NetworkConfig {
     private String accessKey;
     private String secretKey;
 
+    private boolean customAuth = false;
 
     public String getDomain() {
         return domain;
@@ -65,5 +66,13 @@ public class ChannelConfig extends NetworkConfig {
 
     public void setSecretKey(String secretKey) {
         this.secretKey = secretKey;
+    }
+
+    public boolean isCustomAuth() {
+        return customAuth;
+    }
+
+    public void setCustomAuth(boolean customAuth) {
+        this.customAuth = customAuth;
     }
 }

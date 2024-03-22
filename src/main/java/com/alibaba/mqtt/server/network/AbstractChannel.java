@@ -36,6 +36,10 @@ public class AbstractChannel {
         this.channelConfig = channelConfig;
     }
 
+    public ChannelConfig getChannelConfig() {
+        return channelConfig;
+    }
+
     protected void start() throws IOException, TimeoutException {
         long ts = System.currentTimeMillis();
         factory.setHost(channelConfig.getDomain());
@@ -52,6 +56,9 @@ public class AbstractChannel {
 
         Map<String, Object> properties = new HashMap<>(1);
         properties.put("signKey", String.valueOf(ts));
+        if (channelConfig.isCustomAuth()) {
+            properties.put("customAuth", "true");
+        }
         factory.setClientProperties(properties);
     }
 
