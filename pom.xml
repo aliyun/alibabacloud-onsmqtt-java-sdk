@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.alibaba.mqtt</groupId>  
   <artifactId>server-sdk</artifactId>
-  <version>1.0.6.Final</version>
+  <version>1.0.7.Final</version>
   <packaging>jar</packaging>
 
   <name>onsmqtt-server-sdk</name>
