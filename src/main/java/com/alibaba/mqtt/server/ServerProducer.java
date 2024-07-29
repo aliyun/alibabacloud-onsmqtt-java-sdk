@@ -17,10 +17,14 @@
 
 package com.alibaba.mqtt.server;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.mqtt.server.callback.SendCallback;
 import com.alibaba.mqtt.server.common.SendResult;
 import com.alibaba.mqtt.server.config.ChannelConfig;
 import com.alibaba.mqtt.server.config.ProducerConfig;
+import com.alibaba.mqtt.server.model.MessageProperties;
+import com.alibaba.mqtt.server.model.StringPair;
 import com.alibaba.mqtt.server.network.AbstractChannel;
 import com.alibaba.mqtt.server.util.ThreadFactoryImpl;
 import com.rabbitmq.client.AMQP;
@@ -30,6 +34,7 @@ import com.rabbitmq.client.Connection;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -109,30 +114,60 @@ public class ServerProducer extends AbstractChannel {
     }
 
     public void sendMessage(String mqttTopic, byte[] payload, SendCallback sendCallback) throws IOException {
+        sendMessage(mqttTopic, payload, sendCallback, null, null, null);
+    }
+
+    /**
+     * @param mqttTopic
+     * @param payload
+     * @param sendCallback
+     * @param mqtt5MsgExpireInterval  unit:second
+     * @param mqtt5ContentType
+     * @param mqtt5UserProperty
+     * @throws IOException
+     */
+    public void sendMessage(String mqttTopic,
+                             byte[] payload,
+                             SendCallback sendCallback,
+                             String mqtt5MsgExpireInterval,
+                             String mqtt5ContentType,
+                             List<StringPair> mqtt5UserProperty) throws IOException {
         String msgId = UUID.randomUUID().toString().replaceAll("-", "").toUpperCase();
         synchronized (channel) {
             long publishSeqNo = channel.getNextPublishSeqNo();
-            Map<String, Object> headers = new HashMap<>();
-            headers.put("seqId", publishSeqNo);
-            AMQP.BasicProperties props = new AMQP.BasicProperties.Builder().headers(headers).messageId(msgId).build();
+            AMQP.BasicProperties props = buildAMQPProps(msgId, publishSeqNo, mqtt5MsgExpireInterval, mqtt5ContentType, mqtt5UserProperty);
             if (sendCallback != null) {
                 sendCallbackMap.put(publishSeqNo, new SendCallbackWrapper(sendCallback, msgId));
             }
             channel.basicPublish(mqttTopic, mqttTopic, true, props, payload);
         }
-
     }
 
     public SendResult sendMessage(String mqttTopic, byte[] payload) throws IOException {
+        return sendMessage(mqttTopic, payload, null, null, null);
+    }
+
+    /**
+     * @param mqttTopic
+     * @param payload
+     * @param mqtt5MsgExpireInterval unit: second
+     * @param mqtt5ContentType
+     * @param mqtt5UserProperty
+     * @return
+     * @throws IOException
+     */
+    public SendResult sendMessage(String mqttTopic,
+                                   byte[] payload,
+                                   String mqtt5MsgExpireInterval,
+                                   String mqtt5ContentType,
+                                   List<StringPair> mqtt5UserProperty) throws IOException {
         String msgId = UUID.randomUUID().toString().replaceAll("-", "").toUpperCase();
         CountDownLatch countDownLatch = new CountDownLatch(1);
         SendResult sendResult = new SendResult(false);
         SyncSendCallBack syncSendCallBack = new SyncSendCallBack(sendResult, countDownLatch);
         synchronized (channel) {
             long publishSeqNo = channel.getNextPublishSeqNo();
-            Map<String, Object> headers = new HashMap<>();
-            headers.put("seqId", publishSeqNo);
-            AMQP.BasicProperties props = new AMQP.BasicProperties.Builder().headers(headers).messageId(msgId).build();
+            AMQP.BasicProperties props = buildAMQPProps(msgId, publishSeqNo, mqtt5MsgExpireInterval, mqtt5ContentType, mqtt5UserProperty);
             sendCallbackMap.put(publishSeqNo, new SendCallbackWrapper(syncSendCallBack, msgId));
             channel.basicPublish(mqttTopic, mqttTopic, true, props, payload);
         }
@@ -142,7 +177,25 @@ public class ServerProducer extends AbstractChannel {
             return sendResult;
         }
         return sendResult;
+    }
 
+    private AMQP.BasicProperties buildAMQPProps(String msgId,
+                                                long publishSeqNo,
+                                                String mqtt5MsgExpireInterval,
+                                                String mqtt5ContentType,
+                                                List<StringPair> mqtt5UserProperty) {
+        Map<String, Object> headers = new HashMap<>();
+        headers.put("seqId", publishSeqNo);
+        if (mqtt5UserProperty != null && !mqtt5UserProperty.isEmpty()) {
+            headers.put(MessageProperties.MQTT5_USER_PROPERTIES, JSON.toJSONString(mqtt5UserProperty));
+        }
+        AMQP.BasicProperties props = new AMQP.BasicProperties.Builder()
+                .headers(headers)
+                .messageId(msgId)
+                .contentType(mqtt5ContentType)
+                .expiration(mqtt5MsgExpireInterval)
+                .build();
+        return props;
     }
 
     private class SendCallbackWrapper {

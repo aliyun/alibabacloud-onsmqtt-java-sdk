@@ -28,10 +28,12 @@ import com.alibaba.mqtt.server.config.ConsumerConfig;
 import com.alibaba.mqtt.server.config.ProducerConfig;
 import com.alibaba.mqtt.server.model.MessageProperties;
 import com.alibaba.mqtt.server.model.StatusNotice;
+import com.alibaba.mqtt.server.model.StringPair;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.concurrent.TimeoutException;
 
 public class Sample {
@@ -85,7 +87,7 @@ public class Sample {
                 public void onFail() {
                     System.out.println("SendFail ");
                 }
-            });
+            }, "600", "text/plain", Arrays.asList(new StringPair("k1", "v1")));
         }
 
         Thread.sleep(10000000);
