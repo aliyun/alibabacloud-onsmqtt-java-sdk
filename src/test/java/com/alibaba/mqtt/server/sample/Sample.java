@@ -68,7 +68,7 @@ public class Sample {
         serverConsumer.subscribeStatus(mqttGroupId, new StatusListener() {
             @Override
             public void process(StatusNotice statusNotice) {
-                System.out.println(statusNotice.getClientId() + "," + statusNotice.getStatusType());
+                System.out.println(JSON.toJSONString(statusNotice));
             }
         });
 

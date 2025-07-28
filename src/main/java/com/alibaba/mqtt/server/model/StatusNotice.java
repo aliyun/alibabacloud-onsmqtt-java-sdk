@@ -30,7 +30,7 @@ public class StatusNotice {
     private String clientIp;
     private long time;
     private String certificateChainSn;
-
+    private String remark;
     public StatusNotice(byte[] payload) {
         JSONObject msgBody = JSON.parseObject(new String(payload, StandardCharsets.UTF_8));
         String eventType = msgBody.getString("eventType");
@@ -44,6 +44,7 @@ public class StatusNotice {
         this.clientIp = msgBody.getString("clientIp");
         this.time = msgBody.getLongValue("time");
         this.certificateChainSn = msgBody.getString("certificateChainSn");
+        this.remark = msgBody.getString("remark");
     }
 
     public String getClientId() {
@@ -68,5 +69,9 @@ public class StatusNotice {
 
     public String getCertificateChainSn() {
         return certificateChainSn;
+    }
+
+    public String getRemark() {
+        return remark;
     }
 }
